@@ -1,4 +1,4 @@
-requests==2.31.0
-yt-dlp
-pytest==7.4.3
-tqdm==4.66.1
+requests==2.32.4
+yt-dlp==2025.8.11
+tqdm==4.67.1
+ffmpeg-python==0.2.0

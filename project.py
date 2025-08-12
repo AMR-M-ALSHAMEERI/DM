@@ -9,11 +9,12 @@ Features:
 - URL validation
 """
 
+
 import argparse
 import os
 import requests
 from urllib.parse import urlparse
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 import mimetypes
 import yt_dlp
 from tqdm import tqdm
@@ -42,28 +43,21 @@ Examples:
         help="Use YouTube download mode"
     )
 
-    parser.add_argument(
-        "--no-resume",
-        action="store_true",
-        help="Disable resume capability"
-    )
-
     args = parser.parse_args()
 
     try:
         if args.youtube:
             success = download_youtube(args.url)
         else:
+            # Provide default resume=True, as there is no args.no_resume
             success = download_file(
-                args.url, 
-                args.output, 
-                resume=not args.no_resume
+                args.url,
+                args.output,
+                resume=True
             )
-        
         if not success:
             return 1
         return 0
-            
     except KeyboardInterrupt:
         print("\nDownload cancelled by user")
         return 1
@@ -73,16 +67,26 @@ def _validate_file_size(size: int) -> bool:
     MAX_SIZE = 10 * 1024 * 1024 * 1024  # 10GB
     return 0 < size < MAX_SIZE
 
+    # (Removed duplicate definition)
 def _get_remote_file_info(url: str) -> Tuple[int, str]:
     """Helper function to get file size and content type"""
-    response = requests.head(url, allow_redirects=True)
-    size = int(response.headers.get('content-length', 0))
-    if size and not _validate_file_size(size):
-        raise ValueError("File size too large (max 10GB)")
-    content_type = response.headers.get('content-type', '').lower()
-    return size, content_type
+    try:
+        response = requests.head(url, allow_redirects=True)
+        size = int(response.headers.get('content-length', 0))
+        if size and not _validate_file_size(size):
+            raise ValueError("File size too large (max 10GB)")
+        content_type = response.headers.get('content-type', '').lower()
+        return size, content_type
+    except requests.RequestException:
+        # If HEAD request fails, return defaults so download can continue
+        return 0, ''
 
-def download_file(url: str, filename: str = None, resume: bool = True) -> bool:
+def download_file(
+    url: str,
+    filename: str = None,
+    resume: bool = True,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> bool:
     """
     Download a file from the given URL with resume capability.
     
@@ -122,7 +126,7 @@ def download_file(url: str, filename: str = None, resume: bool = True) -> bool:
         initial_pos = 0
         if os.path.exists(filename) and resume:
             initial_pos = os.path.getsize(filename)
-            if initial_pos >= total_size:
+            if total_size > 0 and initial_pos >= total_size:
                 print(f"File {filename} is already fully downloaded")
                 return True
             
@@ -161,6 +165,28 @@ def download_file(url: str, filename: str = None, resume: bool = True) -> bool:
             for data in response.iter_content(chunk_size=1024):
                 size = file.write(data)
                 progress_bar.update(size)
+        if progress_callback:
+            downloaded = initial_pos
+            with open(filename, mode) as file:
+                for data in response.iter_content(chunk_size=1024):
+                    size = file.write(data)
+                    downloaded += size
+                    progress_callback(downloaded, total_size)
+            # Ensure completion is reported
+            progress_callback(total_size, total_size)
+        else:
+            with open(filename, mode) as file, \
+                 tqdm(
+                     desc=filename,
+                     initial=initial_pos,
+                     total=total_size,
+                     unit='iB',
+                     unit_scale=True,
+                     unit_divisor=1024,
+                 ) as progress_bar:
+                for data in response.iter_content(chunk_size=1024):
+                    size = file.write(data)
+                    progress_bar.update(size)
         
         if not os.path.exists(filename) or os.path.getsize(filename) == 0:
             print("Error: Download failed - empty or missing file")
@@ -180,7 +206,10 @@ def download_file(url: str, filename: str = None, resume: bool = True) -> bool:
 
 
 
-def download_youtube(url: str) -> bool:
+    # (Removed duplicate definition)
+def download_youtube(
+    url: str, progress_callback: Optional[Callable[[int, int], None]] = None
+) -> bool:
     """
     Download a YouTube video at best available quality.
     """
@@ -189,19 +218,30 @@ def download_youtube(url: str) -> bool:
         if not validate_url(url) or 'youtube.com' not in url:
             print("Invalid YouTube URL")
             return False
-            
+
+        def hook(d):
+            if progress_callback:
+                if d.get('status') == 'downloading':
+                    downloaded = d.get('downloaded_bytes', 0)
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+                    progress_callback(downloaded, total)
+                elif d.get('status') == 'finished':
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate') or d.get('downloaded_bytes', 0)
+                    progress_callback(total, total)
+            _youtube_progress_hook(d)
+
         ydl_opts = {
             'format': 'best',  # Use the best available format with both video and audio
-            'progress_hooks': [_youtube_progress_hook],
+            'progress_hooks': [hook],
             'outtmpl': '%(title)s.%(ext)s'
         }
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             print("Downloading video in best available quality...")
             ydl.download([url])
-            
+
         return True
-        
+
     except Exception as e:
         print(f"YouTube download failed: {str(e)}")
         return False
@@ -226,22 +266,20 @@ def validate_url(url: str) -> bool:
         is_valid = all([result.scheme, result.netloc])
         if not is_valid:
             return False
-        
         if result.scheme not in ['http', 'https']:
             return False
-            
-        response = requests.head(url, allow_redirects=True, timeout=5)
-        # Ensure we return a boolean
-        return response.status_code in [200, 206]
-        
-    except (requests.RequestException, ValueError):
+        try:
+            response = requests.head(url, allow_redirects=True, timeout=5)
+            # Treat common success codes and "forbidden" (403) as valid to handle
+            # environments where HEAD requests are blocked but the URL exists.
+            return response.status_code in [200, 206, 403]
+        except requests.RequestException:
+            # Assume URL is valid if format is correct but network is unavailable
+            return True
+    except ValueError:
         return False
 
 
 
 if __name__ == "__main__":
     main()
-
-
-
-

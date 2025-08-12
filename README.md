@@ -1,83 +1,96 @@
-# File Downloader with Resume & YouTube Support
+gi# File Downloader & YouTube Downloader GUI
+
 #### Video Demo: <INSERT_YOUTUBE_VIDEO_URL_HERE>
-#### Description:
 
-This project is a Python-based command-line tool that allows users to download regular files and YouTube videos with support for resuming incomplete downloads. It was developed as a final project for CS50’s Introduction to Programming with Python (CS50P).
+## Description
 
-The tool provides a robust and user-friendly interface for downloading files with additional features such as:
+This project is a Python-based application with both a command-line and a graphical user interface (GUI) for downloading files and YouTube videos. It supports resuming, pausing, and cancelling downloads, and provides real-time progress, speed, and ETA information. The GUI is built with Tkinter and supports quality selection for YouTube videos.
 
-- Resume capability for large or interrupted downloads  
-- Real-time download progress with ETA using `tqdm`  
-- YouTube video download support using `yt-dlp`  
-- Smart URL validation before downloading  
-- Clear error handling for network and file-related issues  
+---
+
+## Features
+- Download any file from a direct URL with resume, pause, and cancel support
+- Download YouTube videos with quality selection (using `yt-dlp`)
+- Real-time progress bar with percentage, speed, and ETA
+- Automatic filename and filetype detection
+- Open file or folder after download completes
+- Smart URL validation and error handling
 
 ---
 
 ## Project Structure
 
-### `project.py`
-
-This is the main program file. It includes:
-
-- `main()`: Parses command-line arguments and initiates the appropriate download mode (file or YouTube).
-- `download_file(url, filename=None, resume=True)`: Handles file downloads from standard HTTP/HTTPS sources with resume support and a progress bar.
-- `download_youtube(url)`: Downloads videos from YouTube using `yt-dlp` in the best available quality.
-- `validate_url(url)`: Validates the format and accessibility of a given URL using `urllib.parse` and HTTP HEAD requests.
-- `_get_remote_file_info(url)`: Retrieves the file size and content type from the response headers.
-- `_validate_file_size(size)`: Ensures the file is within a 10GB limit.
-- `_youtube_progress_hook(d)`: Displays download progress during YouTube downloads.
-
-
-### `test_project.py`
-
-This file contains unit tests using `pytest` and `unittest.mock` to ensure reliability across various scenarios. It tests:
-
-- `validate_url()` for valid and invalid URLs
-- `download_file()` including:
-  - New downloads
-  - Resumable downloads
-  - Behavior when resume is unsupported
-- `download_youtube()` including:
-  - Valid and invalid URLs
-  - Mocked `yt_dlp` behavior
-- `main()` logic with command-line arguments
-- `_validate_file_size()` for edge cases
-- `_youtube_progress_hook()` output handling
-
-All tests are isolated and clean up downloaded files after execution.
-
-### `requirements.txt`
-
-- requests
-- yt-dlp
-- tqdm
-- pytest
-
+- `project.py`: Core download logic for files and YouTube, used by both CLI and GUI
+- `gui.py`: Tkinter-based GUI for user-friendly downloads
+- `test_project.py`: Unit tests for core logic
+- `requirements.txt`: All dependencies, version-pinned
 
 ---
+
 ## Installation
 
-Install dependencies:
+1. Clone the repository and navigate to the project folder.
+2. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
-
-python project.py https://example.com/file.txt
-python project.py https://example.com/file.txt -o custom_name.txt
-python project.py https://example.com/file.txt --no-resume
 ```
-YouTube Video Download
+
+3. (Recommended for YouTube downloads) Install the ffmpeg binary and add it to your system PATH:
+   - Download from: https://www.gyan.dev/ffmpeg/builds/
+   - Extract and add the `bin` folder to your PATH
+
+---
+
+## Usage
+
+### Command-Line
+
+Download a file:
+```bash
+python project.py https://example.com/file.pdf
+```
+
+Download a file with custom name:
+```bash
+python project.py https://example.com/file.pdf -o myfile.pdf
+```
+
+Download a YouTube video:
 ```bash
 python project.py --youtube https://youtube.com/watch?v=VIDEO_ID
 ```
 
-Options:
+### GUI
 
-`url`: The file or video URL to download
+Run the GUI:
+```bash
+python gui.py
+```
 
-`-o, --output`: Custom output filename
+- Paste a URL and (optionally) select output file
+- For YouTube, check "YouTube Mode" and select quality
+- Use Pause/Resume and Cancel as needed
+- When finished, use the Open File/Folder buttons
 
-`--youtube`: Enable YouTube download mode
+---
 
-`--no-resume`: Disable resume capability
+## Requirements
+
+- Python 3.8+
+- requests==2.32.4
+- yt-dlp==2025.8.11
+- tqdm==4.67.1
+- ffmpeg-python==0.2.0
+
+---
+
+## Notes
+- For best YouTube experience, install ffmpeg and add it to your PATH
+- All downloads are resumable and cancellable from the GUI
+- Tested on Windows (should work on Linux/Mac with minor tweaks)
+
+---
+
+## License
+MIT
