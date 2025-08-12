@@ -1,0 +1,4 @@
+requests==2.31.0
+yt-dlp
+pytest==7.4.3
+tqdm==4.66.1
